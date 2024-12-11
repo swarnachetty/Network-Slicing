@@ -33,14 +33,15 @@ class Network:
         self.users = []
         for i in range(num_requests):
             user_location = (np.random.uniform(0, 4), np.random.uniform(0, 4))
-            user = User(id=i, type=random.choice(['mobile', 'static']), location=user_location)
+            prb_randomised = random.choice([15, 9, 60, 41, 3])
+            user = User(id=i, type=random.choice(['mobile', 'static']), location=user_location, prb_requested = prb_randomised)
             self.assign_user_to_station(user)
             self.users.append(user)
         #self.users = [User(id=i, type=random.choice(['mobile', 'static']), location=(np.random.uniform(0, 4), np.random.uniform(0, 4))) for i in range(num_requests)]
         self.slice_definitions = {
-             'eMBB': {'services': ['Video Streaming', 'File Download'], 'lambda': 5},
-            'URLLC': {'services': ['Remote Surgery', 'Autonomous Vehicles'], 'lambda': 5},
-            # 'mMTC': {'services': ['IoT Monitoring'], 'lambda': 50}
+            'eMBB': {'services': ['Video Streaming', 'File Download'], 'lambda': 5, 'min_prb_pct': 60, 'max_prb_pct': 100},
+            'URLLC': {'services': ['Remote Surgery', 'Autonomous Vehicles'], 'lambda': 5, 'min_prb_pct': 25, 'max_prb_pct': 100},
+            'mMTC': {'services': ['IoT Monitoring'], 'lambda': 50, 'min_prb_pct': 10, 'max_prb_pct': 100}
         }
         
         
@@ -48,6 +49,7 @@ class Network:
     def assign_user_to_station(self, user):
         # Assign user to the nearest base station
         slice_name = user.determine_slice()
+        print(slice_name, user.prb_requested)
         nearest_station = min(self.base_stations, key=lambda bs: bs.calculate_distance(user))
         nearest_station.connect_user(user, slice_name)
         user.serving_base_station = nearest_station
@@ -67,7 +69,7 @@ class Network:
                     service_request = random.choice(slice_data['services'])
                     snr = user.serving_base_station.calculate_snr(user)
                     cqi = user.serving_base_station.calculate_cqi(snr)
-                    print(f"User {user.id} ({user.type}) requested {service_request}. SNR: {snr:.2f}, CQI: {cqi}")
+                    # print(f"User {user.id} ({user.type}) requested {service_request}. SNR: {snr:.2f}, CQI: {cqi}")
                 
 
         self.plot_network()
@@ -179,14 +181,29 @@ class BaseStation:
         self.get_connected_users_info()
 
 class User:
-    def __init__(self, id, type, location):
+    def __init__(self, id, type, location, prb_requested):
         self.id = id
         self.type = type
         self.location = location
         self.serving_base_station = None  # Add a reference to the serving base station
+        self.prb_requested = prb_requested
 
     def determine_slice(self):
-        return 'URLLC'
+        """
+        Schema for the prbs of each slice and service are assumed as:
+        Slice  Service               prb_allocated
+        eMBB   Video Streaming       15
+        eMBB   File Download         9
+        URLLC  Remote Surgery        60
+        URLLC  Autonomous Vehicles   41
+        mMTC   IoT Monitoring        3
+        """
+        if self.prb_requested < 5:
+            return 'mMTC'
+        elif self.prb_requested > 40:
+            return 'URLLC'
+        
+        return 'eMBB'
 
 # Running the simulation
 network = Network()
