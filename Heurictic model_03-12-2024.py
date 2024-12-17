@@ -23,6 +23,13 @@ import random
 
 class Network:
     def __init__(self):
+        ###### can make these as non static vars!!!!
+        # allocated slices: 'eMBB' = 60%, 'URLLC' = 25%, 'mMTC' = 10%
+        self.slice_definitions = {
+            'eMBB': {'services': ['Video Streaming', 'File Download'], 'lambda': 5, 'min_prb': 167, 'max_prb': 100},
+            'URLLC': {'services': ['Remote Surgery', 'Autonomous Vehicles'], 'lambda': 5, 'min_prb': 70, 'max_prb': 100},
+            'mMTC': {'services': ['IoT Monitoring'], 'lambda': 50, 'min_prb': 27, 'max_prb': 100}
+        }
         grid_size = 3  # 3x3 grid for base stations
         self.base_stations = [BaseStation(id=i, location=(x, y))
                               for i, (x, y) in enumerate(self.generate_grid_positions(grid_size, spacing=2))]
@@ -30,46 +37,41 @@ class Network:
         num_requests = np.random.poisson(lambda_rate)
         print(f"num_requests: {num_requests}")
         
+        ###### !!!!!!! This should not be here - it is causing errors
         self.users = []
         for i in range(num_requests):
+            # initiate randomised user locations and their prb requests
             user_location = (np.random.uniform(0, 4), np.random.uniform(0, 4))
             prb_randomised = random.choice([15, 9, 60, 41, 3])
+            # future work: make any remote surgery ue static by default
             user = User(id=i, type=random.choice(['mobile', 'static']), location=user_location, prb_requested = prb_randomised)
             self.assign_user_to_station(user)
             self.users.append(user)
         #self.users = [User(id=i, type=random.choice(['mobile', 'static']), location=(np.random.uniform(0, 4), np.random.uniform(0, 4))) for i in range(num_requests)]
-        self.slice_definitions = {
-            'eMBB': {'services': ['Video Streaming', 'File Download'], 'lambda': 5, 'min_prb_pct': 60, 'max_prb_pct': 100},
-            'URLLC': {'services': ['Remote Surgery', 'Autonomous Vehicles'], 'lambda': 5, 'min_prb_pct': 25, 'max_prb_pct': 100},
-            'mMTC': {'services': ['IoT Monitoring'], 'lambda': 50, 'min_prb_pct': 10, 'max_prb_pct': 100}
-        }
         
-        
-                
+    
     def assign_user_to_station(self, user):
-        # Assign user to the nearest base station
         slice_name = user.determine_slice()
-        print(slice_name, user.prb_requested)
+        # ientify nearest station and check if PRBs are available for appropriate network
         nearest_station = min(self.base_stations, key=lambda bs: bs.calculate_distance(user))
-        nearest_station.connect_user(user, slice_name)
+        # if nearest_station.does_net_slice_have_prb_space(slice_name, user.prb_requested):
+        # print(slice_name, user.prb_requested)
+        nearest_station.connect_or_standby_user(user, slice_name)
         user.serving_base_station = nearest_station
+        # print(nearest_station.location)
 
     def generate_grid_positions(self, size, spacing):
         return [(x, y) for x in np.linspace(0, size - 1, size) * spacing for y in np.linspace(0, size - 1, size) * spacing]
 
     def simulate_network_operation(self):
-        for slice_name, slice_data in self.slice_definitions.items():
-            #num_requests = np.random.poisson(slice_data['lambda'])
-            #print(f"slice_name: {slice_name} --> {num_requests}")
-            #print(f"num_requests: {num_requests}")
-            
-            for user in self.users:
-                print(user)
-                if user.serving_base_station:  # This check is now essentially redundant
-                    service_request = random.choice(slice_data['services'])
-                    snr = user.serving_base_station.calculate_snr(user)
-                    cqi = user.serving_base_station.calculate_cqi(snr)
-                    # print(f"User {user.id} ({user.type}) requested {service_request}. SNR: {snr:.2f}, CQI: {cqi}")
+        # for slice_name, slice_data in self.slice_definitions.items():
+        for user in self.users:
+            # print("Here we start: ", user)
+            if user.serving_base_station:  # This check is now essentially redundant
+                # service_request = random.choice(slice_data['services'])
+                snr = user.serving_base_station.calculate_snr(user)
+                cqi = user.serving_base_station.calculate_cqi(snr)
+                # print(f"User {user.id} ({user.type}) requested {service_request}. SNR: {snr:.2f}, CQI: {cqi}")
                 
 
         self.plot_network()
@@ -77,6 +79,7 @@ class Network:
         # Display detailed info for each base station
         for bs in self.base_stations:
             bs.display_base_station_info()
+        bs.get_standby_users_info()
 
     def plot_network(self):
         fig, ax = plt.subplots()
@@ -102,19 +105,49 @@ class Network:
         plt.show()
 
 class BaseStation:
+    # ######## !!!!!!!!! make this a non static function
+    ########## !!!!!!! check if logistically prb reset works
     def __init__(self, id, location):
         self.id = id
         self.location = location
         self.connected_users = []  # List to track connected users
+        self.standby_users = [] # List of rejected users due to lack of availabe PRBs
         self.total_prbs = 278  # Number of PRBs available]
+        self.available_prb_slices = {
+            'eMBB': 167,
+            'URLLC': 70,
+            'mMTC': 27,        
+        }
         
-    def connect_user(self, user,slice_name):
-        if user not in self.connected_users:
-            self.connected_users.append((user, slice_name))
+    def connect_or_standby_user(self, user, slice_name):
+        available_prb_for_slice = self.available_prb_slices[slice_name] - user.prb_requested
+        if available_prb_for_slice >= 0:
+            if user not in self.connected_users:
+                self.connected_users.append((user, slice_name))
+                self.available_prb_slices[slice_name] = available_prb_for_slice
+                # print("Connected user: ", user.id, user.prb_requested)
+                # update the prb's available for each slice
+        else:
+            if user not in self.standby_users:
+                self.standby_users.append((user, slice_name))
+                # update the prb's available for each slice
+        
 
     def calculate_distance(self, user):
         return np.sqrt((self.location[0] - user.location[0]) ** 2 + (self.location[1] - user.location[1]) ** 2)
         #pass
+    
+    def does_net_slice_have_prb_space(self, slice_name, prb_requested):
+        slice_prb_allowed = self.available_prb_slices[slice_name] - prb_requested
+        if slice_prb_allowed >= 0:
+            return True
+        else:
+            return False
+    
+    def update_prb_used_slices(self, slice_name, prb_request):
+        # update the slice prbs used
+        
+        a = 1
 
     def calculate_snr(self, user, use_hata=False):
         distance = self.calculate_distance(user)  # distance in meters
@@ -171,13 +204,20 @@ class BaseStation:
     def get_connected_users_info(self):
         """ Print information about connected users and their slices """
         for user, slice_name in self.connected_users:
-            print(f"Base Station {self.id}: User ID {user.id} on Slice {slice_name}")
+            print(f"    User list: User ID {user.id} on Slice {slice_name}, requested {user.prb_requested}")
+
+    def get_standby_users_info(self):
+        """ Print information about connected users and their slices """
+        for user, slice_name in self.standby_users:
+            print(f"!! The standby Users: User ID {user.id} on Slice {slice_name}, requested {user.prb_requested}")
+            print(f"!! Connection Refused at Base Station {self.id}, PRBs: {self.available_prb_slices[slice_name]}")
+
 
     def display_base_station_info(self):
         """ Display information about this base station's load and PRB usage """
         print(f"Base Station {self.id} at Location {self.location}:")
         print(f"  Total Connected Users: {len(self.connected_users)}")
-        print(f"  Total PRBs: {self.total_prbs}")
+        print(f"  Total PRBs: {self.available_prb_slices}")
         self.get_connected_users_info()
 
 class User:
