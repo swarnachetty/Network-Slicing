@@ -56,9 +56,12 @@ class Network:
         nearest_station = min(self.base_stations, key=lambda bs: bs.calculate_distance(user))
         # if nearest_station.does_net_slice_have_prb_space(slice_name, user.prb_requested):
         # print(slice_name, user.prb_requested)
-        nearest_station.connect_or_standby_user(user, slice_name)
-        user.serving_base_station = nearest_station
-        # print(nearest_station.location)
+        if nearest_station.can_connect_user_or_standby(user, slice_name):
+            user.serving_base_station = nearest_station
+            print(user.id, nearest_station.id, True)
+        else:
+            print(user.id, nearest_station.id, False)
+            # print(nearest_station.standby_users)
 
     def generate_grid_positions(self, size, spacing):
         return [(x, y) for x in np.linspace(0, size - 1, size) * spacing for y in np.linspace(0, size - 1, size) * spacing]
@@ -79,7 +82,9 @@ class Network:
         # Display detailed info for each base station
         for bs in self.base_stations:
             bs.display_base_station_info()
-        bs.get_standby_users_info()
+        
+        for bs in self.base_stations:
+            bs.get_standby_users_info()
 
     def plot_network(self):
         fig, ax = plt.subplots()
@@ -107,6 +112,7 @@ class Network:
 class BaseStation:
     # ######## !!!!!!!!! make this a non static function
     ########## !!!!!!! check if logistically prb reset works
+    ## 167, 70, 27
     def __init__(self, id, location):
         self.id = id
         self.location = location
@@ -114,23 +120,22 @@ class BaseStation:
         self.standby_users = [] # List of rejected users due to lack of availabe PRBs
         self.total_prbs = 278  # Number of PRBs available]
         self.available_prb_slices = {
-            'eMBB': 167,
+            'eMBB': 1,
             'URLLC': 70,
             'mMTC': 27,        
         }
         
-    def connect_or_standby_user(self, user, slice_name):
+    def can_connect_user_or_standby(self, user, slice_name):
         available_prb_for_slice = self.available_prb_slices[slice_name] - user.prb_requested
         if available_prb_for_slice >= 0:
             if user not in self.connected_users:
                 self.connected_users.append((user, slice_name))
                 self.available_prb_slices[slice_name] = available_prb_for_slice
-                # print("Connected user: ", user.id, user.prb_requested)
-                # update the prb's available for each slice
+                return True
         else:
             if user not in self.standby_users:
                 self.standby_users.append((user, slice_name))
-                # update the prb's available for each slice
+                return False
         
 
     def calculate_distance(self, user):
@@ -210,7 +215,7 @@ class BaseStation:
         """ Print information about connected users and their slices """
         for user, slice_name in self.standby_users:
             print(f"!! The standby Users: User ID {user.id} on Slice {slice_name}, requested {user.prb_requested}")
-            print(f"!! Connection Refused at Base Station {self.id}, PRBs: {self.available_prb_slices[slice_name]}")
+            print(f"!!   Connection Refused at Base Station {self.id}, PRBs: {self.available_prb_slices[slice_name]}")
 
 
     def display_base_station_info(self):
