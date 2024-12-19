@@ -37,7 +37,6 @@ class Network:
         num_requests = np.random.poisson(lambda_rate)
         print(f"num_requests: {num_requests}")
         
-        ###### !!!!!!! This should not be here - it is causing errors
         self.users = []
         for i in range(num_requests):
             # initiate randomised user locations and their prb requests
@@ -121,7 +120,7 @@ class BaseStation:
         self.total_prbs = 278  # Number of PRBs available]
         self.available_prb_slices = {
             'eMBB': 1,
-            'URLLC': 70,
+            'URLLC': 15,
             'mMTC': 27,        
         }
         
@@ -250,6 +249,8 @@ class User:
         
         return 'eMBB'
 
-# Running the simulation
-network = Network()
-network.simulate_network_operation() 
+
+if __name__ == "__main__":
+    # Running the simulation
+    network = Network()
+    network.simulate_network_operation() 
