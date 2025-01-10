@@ -54,25 +54,33 @@ def connect_most_important_user():
                 if slice_name in standby_users_dict_slices.keys():
                     total_avail_prbs = sum(bs.available_prb_slices.values())
                     total_prbs_requested = calculate_sum_slice_prbs(slice_name, standby_users_dict_slices)
-                    print(total_avail_prbs, total_prbs_requested)
-                    if (total_avail_prbs - total_prbs_requested) > 0:
-                        print("We have prb's available and user is now added", slice_name)
-                        reshuffle_slice_prbs(bs, slice_name, total_prbs_requested)
-                        bs.can_connect_standby_user(standby_users_dict_slices[slice_name][0], slice_name)
-                        # call a fct to update the list
-                    elif slice_name == 'URLLC':
-                        print("old users", bs.connected_users)
+                    
+                    # print(bs.connected_users)
+                    check_users_fit_reshuffling(bs, total_avail_prbs, slice_name, standby_users_dict_slices[slice_name])
+                    
+                    """
+                    if slice_name == 'URLLC':
+                        # print("old users", bs.connected_users)
                         if replace_users_for_urlcc(bs, total_prbs_requested, total_avail_prbs):
-                            print("SUCCESSSSSS!!!!")
-                            print("updated users", bs.connected_users)
+                            # print("SUCCESSSSSS!!!!")
+                            # print("updated users", bs.connected_users)
                             bs.can_connect_standby_user(standby_users_dict_slices[slice_name][0], 'URLLC')
-                        
+                    """
+                    
             print(bs.available_prb_slices)
             # calculate_sum_slice_prbs('URLLC', standby_users_dict_slices)
             # check_available_prbs(bs, standby_users_dict_slices)
             
         
-"""         
+"""    
+                    print(total_avail_prbs, total_prbs_requested)
+                    if (total_avail_prbs - total_prbs_requested) > 0:
+                        print("We have prb's available and user is now added", slice_name)
+                        reshuffle_slice_prbs(bs, slice_name, total_prbs_requested)
+                        bs.can_connect_standby_user(standby_users_dict_slices[slice_name][0], slice_name)
+                        # call a fct to update the list 
+
+     
 first have a look if there is enough leftover prb's?? 
 we take 273 - leftover prbs == requested prb
 add as much as we can -- return the new prbs available
@@ -87,13 +95,14 @@ so we have a dictionary of values that need changing
 -- update the slice values at the end ----
 """
 
-def check_users_that_fit(bs, total_avail_prbs, slice_name, user_ls):
+def check_users_fit_reshuffling(bs, total_avail_prbs, slice_name, user_ls):
     # check how many users can we connect to the base station at a time
     for user in user_ls:
         if (total_avail_prbs - user.prb_requested) > 0:
             reshuffle_slice_prbs(bs, slice_name, user.prb_requested)
             bs.can_connect_standby_user(user, slice_name)
             print("We have prb's available and user is now added", slice_name, user.id)
+            print("Added ", bs.connected_users)
     
 
 def calculate_sum_slice_prbs(slice_name, ls_prbs_standby_users):
@@ -101,7 +110,7 @@ def calculate_sum_slice_prbs(slice_name, ls_prbs_standby_users):
     total_sum_request = 0
     for user in standby_users:
         total_sum_request += user.prb_requested
-    print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ", total_sum_request)
+    # print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ", total_sum_request)
     return total_sum_request
 
 
@@ -140,7 +149,6 @@ def replace_users_for_urlcc(bs, total_prbs_requested, total_avail_prbs):
     need to steal 60 - 5 from embb
     """
     additional_prbs_needed = total_prbs_requested - total_avail_prbs
-    print(bs.connected_users)
     replaceable_users = []
     for user,slice_n in bs.connected_users:
         if slice_n == 'eMBB' and additional_prbs_needed > 0:
@@ -157,7 +165,7 @@ def replace_users_for_urlcc(bs, total_prbs_requested, total_avail_prbs):
         bs.available_prb_slices['URLLC'] = 0
         bs.available_prb_slices['mMTC'] = 0
         
-        print(bs.connected_users)
+        print("kicked ppl out: ", bs.connected_users)
         return True
     else:
         print("Failed :(")
@@ -172,7 +180,7 @@ def free_space_for_slice(net_slice):
         slice_order_priority = ['URLLC', 'eMBB', 'mMTC']
         indx = slice_order_priority.index(net_slice)
         slice_ordered = slice_order_priority[indx+1:]
-        print(slice_ordered)
+        # print(slice_ordered)
     else:
         print("Not much space we can find for IoT")
         return None

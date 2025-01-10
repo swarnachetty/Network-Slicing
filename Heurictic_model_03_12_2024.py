@@ -119,12 +119,14 @@ class BaseStation:
         self.standby_users = [] # List of rejected users due to lack of availabe PRBs
         self.total_prbs = 278  # Number of PRBs available]
         self.available_prb_slices = {
-            'eMBB': 1,
-            'URLLC': 15,
+            'eMBB': 167,
+            'URLLC': 70,
             'mMTC': 27,        
         }
         
     def can_connect_user_or_standby(self, user, slice_name):
+        # function checks if prbs are met and connects the user, otherwise 
+        # puts them on standby
         available_prb_for_slice = self.available_prb_slices[slice_name] - user.prb_requested
         if available_prb_for_slice >= 0:
             if user not in self.connected_users:
@@ -135,7 +137,31 @@ class BaseStation:
             if user not in self.standby_users:
                 self.standby_users.append((user, slice_name))
                 return False
-        
+    
+    def can_connect_standby_user(self, user, slice_name):
+        # transfer a standby user to connected user list once prb space has been reshuffled
+        was_user_added = self.can_connect_user_or_standby(user, slice_name)
+        # delete user from standby list
+        if was_user_added:
+            if user in self.standby_users:
+                indx = self.standby_users.index((user, slice_name))
+                self.standby_users.pop(indx)
+                return True
+            else:
+                return False
+            
+    def can_disconnect_user_to_standby(self, user, slice_name):
+        # if user was connected, send it to standby instead
+        if user in self.connected_users:
+            indx = self.connected_users.index((user, slice_name))
+            self.connected_users.pop(indx)
+            # add prb back to the available prbs as user goes on standby
+            self.update_prb_used_for_slice(slice_name, (-user.prb_request))
+            if user not in self.standby_users:
+                self.standby_users.append((user, slice_name))
+                return True
+        return False
+            
 
     def calculate_distance(self, user):
         return np.sqrt((self.location[0] - user.location[0]) ** 2 + (self.location[1] - user.location[1]) ** 2)
@@ -148,10 +174,13 @@ class BaseStation:
         else:
             return False
     
-    def update_prb_used_slices(self, slice_name, prb_request):
-        # update the slice prbs used
-        
-        a = 1
+    def update_prb_used_for_slice(self, slice_name, prb_request):
+        # update the slice prbs used if there is space for them
+        leftover_prb = self.available_prb_slices[slice_name] - prb_request
+        if leftover_prb >= 0:
+            self.available_prb_slices[slice_name] = leftover_prb
+        else: 
+            print("ERROR HAS OCCURRED!!!")
 
     def calculate_snr(self, user, use_hata=False):
         distance = self.calculate_distance(user)  # distance in meters
